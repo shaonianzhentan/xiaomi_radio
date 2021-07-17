@@ -62,7 +62,9 @@ class XiaomiRadio(MediaPlayerEntity):
         self._volume_level = 1
         self._is_volume_muted = False
         self._index = 0
-        self._media_title = '小米空调伴侣电台'
+        self._media_title = None
+        self._media_album_name = None
+        self._media_image_url = None
         self._fm_list = []
         self._attributes = { 'ver': '1.1' }
 
@@ -74,6 +76,20 @@ class XiaomiRadio(MediaPlayerEntity):
     @property
     def media_title(self):
         return self._media_title
+
+    @property
+    def media_album_name(self):
+        """专辑名称."""
+        return self._media_album_name
+
+    @property
+    def media_image_url(self):
+        return self._media_image_url
+
+    @property
+    def media_image_remotely_accessible(self) -> bool:
+        # 图片远程访问
+        return True
 
     @property
     def unique_id(self):
@@ -117,30 +133,11 @@ class XiaomiRadio(MediaPlayerEntity):
             self._state = STATE_PAUSED
         elif current_status == 'run':
             self._state = STATE_PLAYING
-        
+
         # 获取收藏电台
         result = self.device.send("get_channels", {"start": 0})
         self._fm_list = result['chs']
         self._attributes.update({'fm_list': self._fm_list})
-        if len(self._fm_list) > self._index:
-            self._media_title = self._fm_list[self._index]['url']
-            
-    # 选择应用
-    def select_source(self, source):
-        if self.apps[source] is not None and self.state == STATE_ON:
-            self.execute('startapp&type=packagename&packagename=' + self.apps[source])
-
-    def turn_off(self):
-        if self._state != STATE_OFF:
-            self.keyevent('power')
-            self.fire_event('off')
-            self._state = STATE_OFF
-
-    def turn_on(self):
-        """Wake the TV back up from sleep."""
-        if self._state != STATE_ON:
-            self.fire_event('on')
-            self._state = STATE_ON
 
     def volume_up(self):
         self.set_volume_level(self._volume_level + 0.1)
@@ -172,10 +169,7 @@ class XiaomiRadio(MediaPlayerEntity):
         index = self._index + 1
         if index >= _len:
             index = 0
-        self._index = index
-        fm = self._fm_list[index]
-        self._media_title = fm['url']
-        self.device.send('play_specify_fm', {'id': fm['id'], 'type': fm['type']})
+        self.load_media(index)
 
     def media_previous_track(self):
         _len = len(self._fm_list)
@@ -184,7 +178,17 @@ class XiaomiRadio(MediaPlayerEntity):
         index = self._index - 1
         if index < 0:
             index = len(self._fm_list) - 1
+        self.load_media(index)
+
+    def load_media(self, index):
         self._index = index
         fm = self._fm_list[index]
         self._media_title = fm['url']
-        self.device.send('play_specify_fm', {'id': fm['id'], 'type': fm['type']})
+        id = fm['id']
+        self.device.send('play_specify_fm', {'id': id, 'type': fm['type']})
+        res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
+        res_data = res.json()
+        data = res_data['data']
+        self._media_title = data['programName']
+        self._media_album_name = data['name']
+        self._media_image_url = data['coverLarge']
