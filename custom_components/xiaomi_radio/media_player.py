@@ -63,7 +63,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._is_volume_muted = False
         self._index = 0
         self._media_title = None
-        self._media_album_name = None
+        self._media_artist = None        
         self._media_image_url = None
         self._fm_list = []
         self._attributes = { 'ver': '1.1' }
@@ -78,9 +78,9 @@ class XiaomiRadio(MediaPlayerEntity):
         return self._media_title
 
     @property
-    def media_album_name(self):
-        """专辑名称."""
-        return self._media_album_name
+    def media_artist(self):
+        """歌手"""
+        return self._media_artist
 
     @property
     def media_image_url(self):
@@ -189,6 +189,6 @@ class XiaomiRadio(MediaPlayerEntity):
         res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
         res_data = res.json()
         data = res_data['data']
-        self._media_title = data['programName']
-        self._media_album_name = data['name']
+        self._media_artist = data['name']
+        self._media_title = 'programName' in data and data['programName'] or self._media_artist
         self._media_image_url = data['coverLarge']
