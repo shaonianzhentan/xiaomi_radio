@@ -15,6 +15,7 @@ from homeassistant.components.media_player.const import (
     SUPPORT_SELECT_SOURCE,
     SUPPORT_SELECT_SOUND_MODE,
     SUPPORT_PLAY_MEDIA,
+    SUPPORT_PLAY,
     SUPPORT_PAUSE,
     SUPPORT_NEXT_TRACK,
     SUPPORT_PREVIOUS_TRACK
@@ -28,7 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_TOKEN = 'token'
 
 SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
-    SUPPORT_PLAY_MEDIA | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
+    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
 
 # No host is needed for configuration, however it can be set.
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -61,6 +62,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._volume_level = 1
         self._is_volume_muted = False
         self._index = 0
+        self._media_title = '小米空调伴侣电台'
         self._fm_list = []
         self._attributes = { 'ver': '1.1' }
 
@@ -68,6 +70,10 @@ class XiaomiRadio(MediaPlayerEntity):
     def name(self):
         """Return the display name of this TV."""
         return self._name
+
+    @property
+    def media_title(self):
+        return self._media_title
 
     @property
     def unique_id(self):
@@ -116,6 +122,8 @@ class XiaomiRadio(MediaPlayerEntity):
         result = self.device.send("get_channels", {"start": 0})
         self._fm_list = result['chs']
         self._attributes.update({'fm_list': self._fm_list})
+        if len(self._fm_list) > self._index:
+            self._media_title = self._fm_list[self._index]['url']
             
     # 选择应用
     def select_source(self, source):
@@ -166,6 +174,7 @@ class XiaomiRadio(MediaPlayerEntity):
             index = 0
         self._index = index
         fm = self._fm_list[index]
+        self._media_title = fm['url']
         self.device.send('play_specify_fm', {'id': fm['id'], 'type': fm['type']})
 
     def media_previous_track(self):
@@ -177,4 +186,5 @@ class XiaomiRadio(MediaPlayerEntity):
             index = len(self._fm_list) - 1
         self._index = index
         fm = self._fm_list[index]
+        self._media_title = fm['url']
         self.device.send('play_specify_fm', {'id': fm['id'], 'type': fm['type']})
