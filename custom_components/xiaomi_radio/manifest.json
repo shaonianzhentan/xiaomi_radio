@@ -1,0 +1,13 @@
+{
+    "domain": "xiaomi_radio",
+    "name": "\u5C0F\u7C73\u7535\u53F0",
+    "version": "1.0.0",
+    "documentation": "https://github.com/shaonianzhentan/xiaomi_radio",
+    "requirements": [
+        "python-miio==0.5.6"
+    ],
+    "codeowners": [
+        "@shaonianzhentan"
+    ],
+    "iot_class": "assumed_state"
+}
