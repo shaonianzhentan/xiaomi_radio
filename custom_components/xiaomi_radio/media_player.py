@@ -197,7 +197,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_title = fm['url']
         id = fm['id']
         self.device.send('play_specify_fm', {'id': id, 'type': fm['type']})
-        self.load_media_info(id)
+        # self.load_media_info(id)
 
     def load_media_info(self, id):
         res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
@@ -208,6 +208,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_image_url = data['coverLarge']
 
     async def tts(self, call):
+        _state = self._state
         data = call.data
         message = data.get('text', '')
         is_continue_play = data.get('continue', True)
@@ -241,8 +242,11 @@ class XiaomiRadio(MediaPlayerEntity):
         self.device.send('play_music', [99999])
         # log_msg = "TTS: %s" % message
         self.hass.components.persistent_notification.async_create(f"TTS: {message}", title='小米电台', notification_id="99999")
-        # 这里写TTS完之后的逻辑
-        # 判断当前状态，恢复播放
+        # 如果之前是在播放电台，则恢复播放
+        if is_continue_play and _state == STATE_PLAYING:
+            result = self.device.send("get_music_info", [3])
+            await asyncio.sleep(result['list'][0]['time'])
+            self.media_play()
 
 class AacConverter(HAFFmpeg):
 
