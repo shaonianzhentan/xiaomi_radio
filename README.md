@@ -16,6 +16,5 @@ service: xiaomi_radio.tts
 data:
   text: >-
     现在的时间是 {%- if now().hour < 12 -%} 上午 {%- elif now().hour == 12 -%} 中午
-    {%-     elif now().hour <= 18 -%} 下午 {%- else -%} 晚上 {%- endif %}    
-    {{now().strftime("%I:%M")}}
+    {%- elif now().hour <= 18 -%} 下午 {%- else -%} 晚上 {%- endif %} {{now().strftime("%I:%M")}}
 ```
