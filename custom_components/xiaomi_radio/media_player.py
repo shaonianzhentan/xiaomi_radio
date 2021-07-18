@@ -29,7 +29,7 @@ from homeassistant.components.ffmpeg import (
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STATE_ON, STATE_PLAYING, STATE_PAUSED
 import homeassistant.helpers.config_validation as cv
 
-from .const import DEFAULT_NAME, DOMAIN
+from .const import DEFAULT_NAME, DOMAIN, VERSION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
+    hass.http.register_static_path('/tts-radio', hass.config.path("tts"), False)
     xiaomiRadio = XiaomiRadio(host, token, name, hass)
     hass.services.async_register(DOMAIN, 'tts', xiaomiRadio.tts)
     add_entities([xiaomiRadio])
@@ -73,7 +74,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_artist = None        
         self._media_image_url = None
         self._fm_list = []
-        self._attributes = { 'ver': '1.1' }
+        self._attributes = { 'ver': VERSION }
 
     @property
     def name(self):
@@ -145,6 +146,9 @@ class XiaomiRadio(MediaPlayerEntity):
         result = self.device.send("get_channels", {"start": 0})
         self._fm_list = result['chs']
         self._attributes.update({'fm_list': self._fm_list})
+        # 读取相关信息
+        if current_program is not None:
+            self.load_media_info(current_program)
 
     def volume_up(self):
         self.set_volume_level(self._volume_level + 0.1)
@@ -193,6 +197,9 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_title = fm['url']
         id = fm['id']
         self.device.send('play_specify_fm', {'id': id, 'type': fm['type']})
+        self.load_media_info(id)
+
+    def load_media_info(self, id):
         res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
         res_data = res.json()
         data = res_data['data']
