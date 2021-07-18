@@ -1,10 +1,13 @@
 """Add support for the Xiaomi TVs."""
-import logging
+import logging, asyncio, functools, os
 import requests, time, hashlib
 import voluptuous as vol
-
+from .shaonianzhentan import download
 from miio import Device, DeviceException
 
+from haffmpeg.core import HAFFmpeg
+from homeassistant.helpers.network import get_url
+from homeassistant.components.ffmpeg import (DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)    
 from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerEntity
 from homeassistant.components.media_player.const import (
     SUPPORT_TURN_OFF,
@@ -20,13 +23,15 @@ from homeassistant.components.media_player.const import (
     SUPPORT_NEXT_TRACK,
     SUPPORT_PREVIOUS_TRACK
 )
-from homeassistant.const import CONF_HOST, CONF_NAME, STATE_OFF, STATE_ON, STATE_PLAYING, STATE_PAUSED
+
+from homeassistant.components.ffmpeg import (
+    DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STATE_ON, STATE_PLAYING, STATE_PAUSED
 import homeassistant.helpers.config_validation as cv
 
-from .const import DEFAULT_NAME
+from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-CONF_TOKEN = 'token'
 
 SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
     SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
@@ -47,7 +52,9 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
-    add_entities([XiaomiRadio(host, token, name, hass)])
+    xiaomiRadio = XiaomiRadio(host, token, name, hass)
+    hass.services.async_register(DOMAIN, 'tts', xiaomiRadio.tts)
+    add_entities([xiaomiRadio])
 
 class XiaomiRadio(MediaPlayerEntity):
     """Represent the Xiaomi TV for Home Assistant."""
@@ -127,7 +134,7 @@ class XiaomiRadio(MediaPlayerEntity):
         status = self.device.send("get_prop_fm", [])
         current_volume = status.get('current_volume', 100)
         self._volume_level = current_volume / 100
-
+        current_program = status.get('current_program')
         current_status = status.get('current_status', 'pause')
         if current_status == 'pause':
             self._state = STATE_PAUSED
@@ -192,3 +199,71 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_artist = data['name']
         self._media_title = 'programName' in data and data['programName'] or self._media_artist
         self._media_image_url = data['coverLarge']
+
+    async def tts(self, message):
+        tts_dir = self.hass.config.path("tts")
+        mp3Path = tts_dir + '/xxx.mp3'
+        # 下载mp3文件
+        await download('https://fanyi.baidu.com/gettts?lan=zh&text=%E8%AF%AD%E9%9F%B3%E8%BD%AC%E6%96%87%E6%9C%AC&spd=5&source=web', mp3Path)
+        # 转换aac文件
+        aacPath = tts_dir + '/xxx.aac'
+        ttsUrl = get_url(self.hass).strip('/') + '/tts-local/xxx.aac'
+        ffmpeg = AacConverter(self.hass.data[DATA_FFMPEG].binary, loop=self.hass.loop)
+        result = await ffmpeg.convert(mp3Path, output=aacPath)
+        if (not result) or (not os.path.exists(aacPath)) or (os.path.getsize(aacPath) < 1):
+            _LOGGER.error("Convert file to aac failed.")
+            return False
+        self.device.send("delete_user_music", ['99999'])
+        self.device.send("download_user_music", ["99999", ttsUrl])
+        index = 0
+        while index < 10:
+            progess = self.device.send("get_download_progress", [])
+            if str(progess) == "['99999:100']":
+                break
+            index += 1
+            await asyncio.sleep(1)
+        if (index >= 10):
+            _LOGGER.error("download tts file [" + ttsUrl + "] to gateway failed.")
+            return False
+        self.device.send('play_music', [99999])
+        log_msg = "TTS: %s" % message
+        self.hass.components.persistent_notification.async_create(log_msg, title='AC partner TTS', notification_id="99999") 
+
+class AacConverter(HAFFmpeg):
+
+    @asyncio.coroutine
+    def convert(self, input_source, output, extra_cmd=None, timeout=15):
+        command = [
+            "-vn",
+            "-c:a",
+            "aac",
+            "-strict",
+            "-2",
+            "-b:a",
+            "64K",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-y"
+        ]      
+        is_open = yield from self.open(cmd=command, input_source=input_source, output=output, extra_cmd=extra_cmd)         
+        if not is_open:
+            _LOGGER.warning("Error starting FFmpeg.")
+            return False
+        try:
+            proc_func = functools.partial(self._proc.communicate, timeout=timeout)
+            out, error = yield from self._loop.run_in_executor(None, proc_func)
+        except (asyncio.TimeoutError, ValueError):
+            _LOGGER.error("Timeout convert audio file.")
+            self._proc.kill()
+            return False    
+        return True
+
+'''
+0: alarm
+1: alarm
+2: chord
+3: custom
+print(device.send("get_music_info", [0]))
+'''
