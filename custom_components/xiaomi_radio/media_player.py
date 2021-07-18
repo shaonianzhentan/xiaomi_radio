@@ -247,7 +247,7 @@ class XiaomiRadio(MediaPlayerEntity):
         if is_continue_play and _state == STATE_PLAYING:
             result = self.device.send("get_music_info", [3])
             delay = result['list'][0]['time']
-            await asyncio.sleep(delay + 5)
+            await asyncio.sleep(delay + 3)
             self.media_play()
 
         # 解析模板
