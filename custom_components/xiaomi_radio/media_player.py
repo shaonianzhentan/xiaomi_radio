@@ -6,6 +6,7 @@ from .shaonianzhentan import download, md5
 from miio import Device, DeviceException
 
 from haffmpeg.core import HAFFmpeg
+from homeassistant.helpers import template
 from homeassistant.helpers.network import get_url
 from homeassistant.components.ffmpeg import (DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)    
 from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerEntity
@@ -210,7 +211,7 @@ class XiaomiRadio(MediaPlayerEntity):
     async def tts(self, call):
         _state = self._state
         data = call.data
-        message = data.get('text', '')
+        message = self.template_message(data.get('text', ''))
         is_continue_play = data.get('continue', True)
         tts_dir = self.hass.config.path("tts")
         md5_message = md5(message)
@@ -245,8 +246,15 @@ class XiaomiRadio(MediaPlayerEntity):
         # 如果之前是在播放电台，则恢复播放
         if is_continue_play and _state == STATE_PLAYING:
             result = self.device.send("get_music_info", [3])
-            await asyncio.sleep(result['list'][0]['time'])
+            delay = result['list'][0]['time']
+            await asyncio.sleep(delay + 5)
             self.media_play()
+
+        # 解析模板
+    def template_message(self, _message):
+        tpl = template.Template(_message, self.hass)
+        _message = tpl.async_render(None)
+        return _message
 
 class AacConverter(HAFFmpeg):
 
