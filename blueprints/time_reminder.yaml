@@ -4,27 +4,22 @@ blueprint:
   domain: automation
   source_url: https://github.com/shaonianzhentan/xiaomi_radio
   input:
-    after_time:
-      name: 开始时间
-      description: 提示开始时间
+    tipsType:
+      name: 报时方式
+      description: "半点报时: /30  整天报时：/0  每小时40分时语音播报: /40"
       selector:
-        time: '07:59'
-    before_time:
-      name: 结束时间
-      description: 提示结束时间
-      selector:
-        time: '23:00'
+        text:
 mode: restart
 max_exceeded: silent
 trigger:
   - platform: time_pattern
     hours: /1
-    minutes: /30
-    seconds: '0'
+    minutes: !input tipsType
+    seconds: "0"
 condition:
   - condition: time
-    after: !input after_time
-    before: !input before_time
+    after: "07:59"
+    before: "23:00"
 action:
   - service: xiaomi_radio.tts
     data:
