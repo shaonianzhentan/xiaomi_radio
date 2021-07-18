@@ -15,3 +15,9 @@ tts:
       example: "true"
       selector:
         boolean:
+    notification:
+      name: 通知提示
+      description: 显示通知提示
+      example: "false"
+      selector:
+        boolean:

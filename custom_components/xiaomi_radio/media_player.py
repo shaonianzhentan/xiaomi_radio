@@ -212,7 +212,8 @@ class XiaomiRadio(MediaPlayerEntity):
         _state = self._state
         data = call.data
         message = self.template_message(data.get('text', ''))
-        is_continue_play = data.get('continue', True)
+        is_continue = data.get('continue', True)
+        is_notification = data.get('notification', False)
         tts_dir = self.hass.config.path("tts")
         md5_message = md5(message)
         mp3Path = f'{tts_dir}/radio-{md5_message}.mp3'
@@ -241,10 +242,12 @@ class XiaomiRadio(MediaPlayerEntity):
             _LOGGER.error("download tts file [" + ttsUrl + "] to gateway failed.")
             return False
         self.device.send('play_music', [99999])
-        # log_msg = "TTS: %s" % message
-        self.hass.components.persistent_notification.async_create(f"TTS: {message}", title='小米电台', notification_id="99999")
+        
+        if is_notification == True:
+            # log_msg = "TTS: %s" % message
+            self.hass.components.persistent_notification.async_create(f"TTS: {message}", title='小米电台', notification_id="99999")
         # 如果之前是在播放电台，则恢复播放
-        if is_continue_play and _state == STATE_PLAYING:
+        if is_continue and _state == STATE_PLAYING:
             result = self.device.send("get_music_info", [3])
             delay = result['list'][0]['time']
             await asyncio.sleep(delay + 3)
