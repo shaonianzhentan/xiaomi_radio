@@ -2,7 +2,7 @@
 import logging, asyncio, functools, os
 import requests, time, hashlib
 import voluptuous as vol
-from .shaonianzhentan import download
+from .shaonianzhentan import download, md5
 from miio import Device, DeviceException
 
 from haffmpeg.core import HAFFmpeg
@@ -200,19 +200,25 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_title = 'programName' in data and data['programName'] or self._media_artist
         self._media_image_url = data['coverLarge']
 
-    async def tts(self, message):
+    async def tts(self, call):
+        data = call.data
+        message = data.get('text', '')
+        is_continue_play = data.get('continue', True)
         tts_dir = self.hass.config.path("tts")
-        mp3Path = tts_dir + '/xxx.mp3'
-        # 下载mp3文件
-        await download('https://fanyi.baidu.com/gettts?lan=zh&text=%E8%AF%AD%E9%9F%B3%E8%BD%AC%E6%96%87%E6%9C%AC&spd=5&source=web', mp3Path)
-        # 转换aac文件
-        aacPath = tts_dir + '/xxx.aac'
-        ttsUrl = get_url(self.hass).strip('/') + '/tts-local/xxx.aac'
-        ffmpeg = AacConverter(self.hass.data[DATA_FFMPEG].binary, loop=self.hass.loop)
-        result = await ffmpeg.convert(mp3Path, output=aacPath)
-        if (not result) or (not os.path.exists(aacPath)) or (os.path.getsize(aacPath) < 1):
-            _LOGGER.error("Convert file to aac failed.")
-            return False
+        md5_message = md5(message)
+        mp3Path = f'{tts_dir}/radio-{md5_message}.mp3'
+        aacPath = f'{tts_dir}/radio-{md5_message}.aac'
+        ttsUrl = get_url(self.hass).strip('/') + f'/tts-radio/radio-{md5_message}.aac'
+        if os.path.exists(aacPath) == False:
+            # 下载mp3文件
+            await download(f'https://fanyi.baidu.com/gettts?lan=zh&text={message}&spd=5&source=web', mp3Path)
+            # 转换aac文件
+            ffmpeg = AacConverter(self.hass.data[DATA_FFMPEG].binary)
+            result = await ffmpeg.convert(mp3Path, output=aacPath)
+            if (not result) or (not os.path.exists(aacPath)) or (os.path.getsize(aacPath) < 1):
+                _LOGGER.error("Convert file to aac failed.")
+                return False
+        # 删除文件并重新上传
         self.device.send("delete_user_music", ['99999'])
         self.device.send("download_user_music", ["99999", ttsUrl])
         index = 0
@@ -226,8 +232,10 @@ class XiaomiRadio(MediaPlayerEntity):
             _LOGGER.error("download tts file [" + ttsUrl + "] to gateway failed.")
             return False
         self.device.send('play_music', [99999])
-        log_msg = "TTS: %s" % message
-        self.hass.components.persistent_notification.async_create(log_msg, title='AC partner TTS', notification_id="99999") 
+        # log_msg = "TTS: %s" % message
+        self.hass.components.persistent_notification.async_create(f"TTS: {message}", title='小米电台', notification_id="99999")
+        # 这里写TTS完之后的逻辑
+        # 判断当前状态，恢复播放
 
 class AacConverter(HAFFmpeg):
 

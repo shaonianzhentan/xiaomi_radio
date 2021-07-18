@@ -5,6 +5,13 @@ tts:
     text:
       name: 文本
       description: 要说的话
+      required: true
       example: 别搞很长一段文章，可能会卡死
       selector:
         text:
+    continue:
+      name: 继续播放
+      description: 继续播放电台
+      example: "true"
+      selector:
+        boolean:

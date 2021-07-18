@@ -1,4 +1,4 @@
-import aiohttp, asyncio
+import aiohttp, asyncio, hashlib
 
 # 下载文件
 async def download(url, file_path):
@@ -8,6 +8,10 @@ async def download(url, file_path):
             file = await response.read()
             with open(file_path, 'wb') as f:
                 f.write(file)
+
+# MD5加密
+def md5(data):
+    return hashlib.md5(data.encode(encoding='UTF-8')).hexdigest()
 
 # 执行异步方法
 def async_create_task(async_func):
