@@ -204,9 +204,9 @@ class XiaomiRadio(MediaPlayerEntity):
         res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
         res_data = res.json()
         data = res_data['data']
-        self._media_artist = data['name']
-        self._media_title = 'programName' in data and data['programName'] or self._media_artist
-        self._media_image_url = data['coverLarge']
+        self._media_artist = data.get('name', '小米电台')
+        self._media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
+        self._media_title = data.get('programName', self._media_artist)
 
     async def tts(self, call):
         _state = self._state
