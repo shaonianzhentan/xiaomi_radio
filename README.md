@@ -8,6 +8,13 @@ media_player:
   - platform: xiaomi_radio
     host: 192.168.1.106
     token: 空调伴侣密钥
+
+
+# 空调伴侣红外遥控器
+remote:
+  - platform: xiaomi_radio
+    host: 192.168.1.106
+    token: 空调伴侣密钥
 ```
 
 TTS服务
@@ -23,4 +30,4 @@ data:
 ## 如果这个项目对你有帮助，请我喝杯<del style="font-size: 14px;">咖啡</del>奶茶吧😘
 |支付宝|微信|
 |---|---|
-<img src="https://ha.jiluxinqing.com/img/alipay.png" align="left" height="160" width="160" alt="支付宝" title="支付宝">  |  <img src="https://ha.jiluxinqing.com/img/wechat.png" align="left" height="160" width="160" alt="微信支付" title="微信">
+<img src="https://github.com/shaonianzhentan/ha-docs/raw/master/docs/img/alipay.png" align="left" height="160" width="160" alt="支付宝" title="支付宝">  |  <img src="https://github.com/shaonianzhentan/ha-docs/raw/master/docs/img/wechat.png" align="left" height="160" width="160" alt="微信支付" title="微信">
