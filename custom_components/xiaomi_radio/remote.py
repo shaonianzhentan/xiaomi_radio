@@ -93,7 +93,7 @@ class XiaomiRemote(RemoteEntity):
 
         if ir_command.startswith("FE"):
             # 发送红外命令
-            state = await self.device.status()
+            state = self.device.status()
             air_condition_model = state.air_condition_model.hex()
             if air_condition_model is not None:
                 self.device.send_ir_code(air_condition_model, ir_command)
