@@ -15,10 +15,10 @@ from homeassistant.components.remote import (
     RemoteEntity,
 )
 
-from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN
-DEFAULT_NAME = "红外遥控"
+DEFAULT_NAME = "空调伴侣"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,10 +102,10 @@ class XiaomiRemote(RemoteEntity):
         # 开始录码
         slot = 30
         timeout = 30
-        await self.device.learn(slot)
+        self.device.learn(slot)
         start_time = utcnow()
         while (utcnow() - start_time) < timedelta(seconds=timeout):
-            message = await self.device.learn_result()
+            message = self.device.learn_result()
             message = message[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
@@ -114,11 +114,11 @@ class XiaomiRemote(RemoteEntity):
                 self.hass.components.persistent_notification.async_create(
                     log_msg, title="小米遥控器"
                 )
-                await self.device.learn_stop(slot)
+                self.device.learn_stop(slot)
                 return
             await asyncio.sleep(1)
 
-        await self.device.learn_stop(slot)
+        self.device.learn_stop(slot)
         _LOGGER.error("录制超时，没有捕获到红外命令")
         self.hass.components.persistent_notification.async_create(
             "录制超时，没有捕获到红外命令", title="小米遥控器"
