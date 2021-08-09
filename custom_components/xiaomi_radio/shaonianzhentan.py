@@ -1,4 +1,4 @@
-import aiohttp, yaml, asyncio, hashlib
+import aiohttp, yaml, asyncio, hashlib, os
 
 # 下载文件
 async def download(url, file_path):
