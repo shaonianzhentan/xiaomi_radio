@@ -3,6 +3,7 @@ import logging
 import voluptuous as vol
 from datetime import timedelta
 from homeassistant.util.dt import utcnow
+from .shaonianzhentan import save_yaml, load_yaml
 
 from miio import AirConditioningCompanion, DeviceException
 
@@ -43,6 +44,7 @@ class XiaomiRemote(RemoteEntity):
         self.hass = hass
         self._host = host
         self._name = name
+        self.config_file = hass.config.path(".shaonianzhentan/ir_command.yaml")
         self.device = AirConditioningCompanion(host, token)
 
     @property
@@ -69,11 +71,11 @@ class XiaomiRemote(RemoteEntity):
          
     async def async_send_command(self, command, **kwargs):
         key = command[0]
-        # 读取本地存储文件
-        actionKeys = {}
-
-        if key in actionKeys:
-            ir_command = actionKeys[key][0]
+        # 读取配置文件
+        command_list = load_yaml(self.config_file)
+        # 判断配置是否存在
+        if key in command_list:
+            ir_command = command_list[key]
         else:
             ir_command = key
 
@@ -84,7 +86,12 @@ class XiaomiRemote(RemoteEntity):
             if air_condition_model is not None:
                 self.device.send_ir_code(air_condition_model, ir_command)
 
-    async def async_learn_command(self, **kwargs):        
+    async def async_learn_command(self, **kwargs):
+        command = kwargs.get('command', '')
+        if command == '':
+            return
+        # 读取配置文件
+        command_list = load_yaml(self.config_file)
         # 开始录码
         slot = 30
         timeout = 30
@@ -95,17 +102,18 @@ class XiaomiRemote(RemoteEntity):
             message = message[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
-                log_msg = "收到的命令是: {}".format(message)
-                _LOGGER.info(log_msg)
+                command_list[command] = message
+                log_msg = "收到的命令是: {}, 红外码：{}".format(command, message)
                 self.hass.components.persistent_notification.async_create(
                     log_msg, title="小米遥控器"
                 )
                 self.device.learn_stop(slot)
+                # 保存配置文件
+                save_yaml(self.config_file, command_list)
                 return
             await asyncio.sleep(1)
 
         self.device.learn_stop(slot)
-        _LOGGER.error("录制超时，没有捕获到红外命令")
         self.hass.components.persistent_notification.async_create(
             "录制超时，没有捕获到红外命令", title="小米遥控器"
         )
