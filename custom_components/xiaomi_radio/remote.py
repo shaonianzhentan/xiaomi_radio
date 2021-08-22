@@ -70,25 +70,27 @@ class XiaomiRemote(RemoteEntity):
          """Turn the remote off."""
          
     async def async_send_command(self, command, **kwargs):
+        device = kwargs.get('device', '')
         key = command[0]
-        # 读取配置文件
-        command_list = load_yaml(self.config_file)
-        # 判断配置是否存在
-        if key in command_list:
-            ir_command = command_list[key]
-        else:
-            ir_command = key
-
+        ir_command = key
+        if device != '':
+            # 读取配置文件
+            command_list = load_yaml(self.config_file)
+            dev = command_list.get(device, {})
+            # 判断配置是否存在
+            if key in dev:
+                ir_command = dev[key]
+        # 发送红外命令
         if ir_command.startswith("FE"):
-            # 发送红外命令
             state = self.device.status()
             air_condition_model = state.air_condition_model.hex()
             if air_condition_model is not None:
                 self.device.send_ir_code(air_condition_model, ir_command)
 
     async def async_learn_command(self, **kwargs):
+        device = kwargs.get('device', '')
         command = kwargs.get('command', '')
-        if command == '':
+        if command == '' or device == '':
             return
         # 读取配置文件
         command_list = load_yaml(self.config_file)
@@ -102,7 +104,7 @@ class XiaomiRemote(RemoteEntity):
             message = message[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
-                command_list[command] = message
+                command_list[device][command] = message
                 log_msg = "收到的命令是: {}, 红外码：{}".format(command, message)
                 self.hass.components.persistent_notification.async_create(
                     log_msg, title="小米遥控器"
