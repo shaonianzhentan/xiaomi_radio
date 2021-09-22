@@ -77,7 +77,8 @@ class XiaomiRemote(RemoteEntity):
         ir_command = key
         if device != '':
             # 读取配置文件
-            command_list = load_yaml(self.default_config_file).update(load_yaml(self.config_file))
+            command_list = load_yaml(self.default_config_file)
+            command_list.update(load_yaml(self.config_file))
             dev = command_list.get(device, {})
             _LOGGER.debug(dev)
             # 判断配置是否存在
