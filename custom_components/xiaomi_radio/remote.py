@@ -45,6 +45,8 @@ class XiaomiRemote(RemoteEntity):
         self._host = host
         self._name = name
         self.config_file = hass.config.path(".shaonianzhentan/ir_command.yaml")
+        # 默认配置
+        self.default_config_file = hass.config.path("custom_components/xiaomi_radio/ir.yaml")
         self.device = AirConditioningCompanion(host, token)
 
     @property
@@ -75,7 +77,7 @@ class XiaomiRemote(RemoteEntity):
         ir_command = key
         if device != '':
             # 读取配置文件
-            command_list = load_yaml(self.config_file)
+            command_list = load_yaml(self.default_config_file).update(load_yaml(self.config_file))
             dev = command_list.get(device, {})
             _LOGGER.debug(dev)
             # 判断配置是否存在
