@@ -8,8 +8,11 @@ from miio import Device, DeviceException
 from haffmpeg.core import HAFFmpeg
 from homeassistant.helpers import template
 from homeassistant.helpers.network import get_url
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.ffmpeg import (DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)    
-from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerEntity
+from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.components.media_player.const import (
     SUPPORT_TURN_OFF,
     SUPPORT_TURN_ON,
@@ -37,26 +40,19 @@ _LOGGER = logging.getLogger(__name__)
 SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
     SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
 
-# No host is needed for configuration, however it can be set.
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_HOST): cv.string,
-        vol.Required(CONF_TOKEN): cv.string,
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-    }
-)
-
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    """Set up the Xiaomi TV platform."""
-
-    # If a hostname is set. Discovery is skipped.
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    config = entry.data
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
     hass.http.register_static_path('/tts-radio', hass.config.path("tts"), False)
     xiaomiRadio = XiaomiRadio(host, token, name, hass)
     hass.services.async_register(DOMAIN, 'tts', xiaomiRadio.tts)
-    add_entities([xiaomiRadio])
+    async_add_entities([xiaomiRadio], True)
 
 class XiaomiRadio(MediaPlayerEntity):
     """Represent the Xiaomi TV for Home Assistant."""

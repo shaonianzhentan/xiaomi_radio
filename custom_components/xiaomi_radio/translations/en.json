@@ -1,0 +1,19 @@
+{
+    "config": {
+        "abort": {
+            "single_instance_allowed": "仅允许单个配置"
+        },
+        "step": {
+            "user": {
+                "description": "",
+                "title": "小米空调伴侣配置",
+                "data": {
+                    "name": "名称",
+                    "host": "IP地址",
+                    "token": "Token"
+                }
+            }
+        }
+    },
+    "title": "小米电台"
+}

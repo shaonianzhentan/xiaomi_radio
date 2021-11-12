@@ -2,6 +2,7 @@
     "domain": "xiaomi_radio",
     "name": "\u5C0F\u7C73\u7535\u53F0",
     "version": "1.0.0",
+    "config_flow": true,
     "documentation": "https://github.com/shaonianzhentan/xiaomi_radio",
     "dependencies": ["ffmpeg"],
     "requirements": [

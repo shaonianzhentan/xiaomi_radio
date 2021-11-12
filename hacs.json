@@ -2,7 +2,5 @@
     "name": "小米电台",
     "country": "CN",
     "render_readme": true,
-    "domains": [
-        "media_player"
-    ]
+    "domains": []
 }

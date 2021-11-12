@@ -7,36 +7,31 @@ from .shaonianzhentan import save_yaml, load_yaml
 
 from miio import AirConditioningCompanion, DeviceException
 
-from homeassistant.components.media_player import PLATFORM_SCHEMA
-
 from homeassistant.components.remote import (
     ATTR_DELAY_SECS,
     ATTR_NUM_REPEATS,
     DEFAULT_DELAY_SECS,
     RemoteEntity,
 )
-
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN
-DEFAULT_NAME = "空调伴侣"
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_HOST): cv.string,
-        vol.Required(CONF_TOKEN): cv.string,
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-    }
-)
-
-def setup_platform(hass, config, add_entities, discovery_info=None):
-
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    config = entry.data
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
-    add_entities([XiaomiRemote(host, token, name, hass)])
+    async_add_entities([XiaomiRemote(host, token, name, hass)], True)
 
 class XiaomiRemote(RemoteEntity):
 
