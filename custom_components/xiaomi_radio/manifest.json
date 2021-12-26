@@ -6,7 +6,7 @@
     "documentation": "https://github.com/shaonianzhentan/xiaomi_radio",
     "dependencies": ["ffmpeg"],
     "requirements": [
-        "python-miio==0.5.8"
+        "python-miio==0.5.9.2"
     ],
     "codeowners": [
         "@shaonianzhentan"
