@@ -29,7 +29,7 @@ async def async_setup_entry(
 ) -> None:
     config = entry.data
     host = config.get(CONF_HOST)
-    name = config.get(CONF_NAME)
+    name = config.get(CONF_NAME) + '遥控器'
     token = config.get(CONF_TOKEN)
     async_add_entities([XiaomiRemote(host, token, name, hass)], True)
 
