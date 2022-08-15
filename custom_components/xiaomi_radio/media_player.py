@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.ffmpeg import (DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)    
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.components.media_player.const import (
+    SUPPORT_BROWSE_MEDIA,
     SUPPORT_TURN_OFF,
     SUPPORT_TURN_ON,
     SUPPORT_VOLUME_STEP,
@@ -34,11 +35,12 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STA
 import homeassistant.helpers.config_validation as cv
 
 from .const import DEFAULT_NAME, DOMAIN, VERSION
+from .browse_media import async_browse_media
 
 _LOGGER = logging.getLogger(__name__)
 
 SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
-    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
+    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | SUPPORT_BROWSE_MEDIA
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -71,7 +73,6 @@ class XiaomiRadio(MediaPlayerEntity):
         self._media_artist = None        
         self._media_image_url = None
         self._fm_list = []
-        self._attributes = { 'ver': VERSION }
 
     @property
     def name(self):
@@ -123,9 +124,14 @@ class XiaomiRadio(MediaPlayerEntity):
         """Flag media player features that are supported."""
         return SUPPORT_XIAOMI_RADIO
 
-    @property
-    def extra_state_attributes(self):
-        return self._attributes
+    async def async_browse_media(self, media_content_type=None, media_content_id=None):
+        return await async_browse_media(self, media_content_type, media_content_id)
+
+    async def async_play_media(self, media_type, media_id, **kwargs):
+        if media_type == 'id':            
+            self.device.send('play_specify_fm', {'id': media_id, 'type': 0})
+        elif media_type == 'tts':
+            pass
 
     def update(self):
         # 当前状态
@@ -142,7 +148,6 @@ class XiaomiRadio(MediaPlayerEntity):
         # 获取收藏电台
         result = self.device.send("get_channels", {"start": 0})
         self._fm_list = result['chs']
-        self._attributes.update({'fm_list': self._fm_list})
         # 读取相关信息
         if current_program is not None:
             self.load_media_info(current_program)
@@ -197,12 +202,15 @@ class XiaomiRadio(MediaPlayerEntity):
         # self.load_media_info(id)
 
     def load_media_info(self, id):
-        res = requests.get('https://live.ximalaya.com/live-web/v1/radio?radioId=' + str(id))
-        res_data = res.json()
-        data = res_data['data']
-        self._media_artist = data.get('name', '小米电台')
-        self._media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
-        self._media_title = data.get('programName', self._media_artist)
+        radioId = str(id)
+        if self._attr_app_id != radioId:
+            self._attr_app_id = radioId
+            res = requests.get(f'https://live.ximalaya.com/live-web/v1/radio?radioId={radioId}')
+            res_data = res.json()
+            data = res_data['data']
+            self._media_artist = data.get('name', '小米电台')
+            self._media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
+            self._media_title = data.get('programName', self._media_artist)
 
     async def tts(self, call):
         _state = self._state
