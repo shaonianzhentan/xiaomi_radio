@@ -40,7 +40,8 @@ from .browse_media import async_browse_media
 _LOGGER = logging.getLogger(__name__)
 
 SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
-    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | SUPPORT_BROWSE_MEDIA
+    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | \
+    SUPPORT_BROWSE_MEDIA | SUPPORT_PLAY_MEDIA
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -69,28 +70,12 @@ class XiaomiRadio(MediaPlayerEntity):
         self._volume_level = 1
         self._is_volume_muted = False
         self._index = 0
-        self._media_title = None
-        self._media_artist = None        
-        self._media_image_url = None
         self._fm_list = []
 
     @property
     def name(self):
         """Return the display name of this TV."""
         return self._name
-
-    @property
-    def media_title(self):
-        return self._media_title
-
-    @property
-    def media_artist(self):
-        """歌手"""
-        return self._media_artist
-
-    @property
-    def media_image_url(self):
-        return self._media_image_url
 
     @property
     def media_image_remotely_accessible(self) -> bool:
@@ -129,11 +114,12 @@ class XiaomiRadio(MediaPlayerEntity):
 
     async def async_play_media(self, media_type, media_id, **kwargs):
         if media_type == 'id':            
-            self.device.send('play_specify_fm', {'id': media_id, 'type': 0})
+            self.device.send('play_specify_fm', {'id': int(media_id), 'type': 0})
+            await self.load_media_info(media_id)
         elif media_type == 'tts':
             pass
 
-    def update(self):
+    async def async_update(self):
         # 当前状态
         status = self.device.send("get_prop_fm", [])
         current_volume = status.get('current_volume', 100)
@@ -150,7 +136,7 @@ class XiaomiRadio(MediaPlayerEntity):
         self._fm_list = result['chs']
         # 读取相关信息
         if current_program is not None:
-            self.load_media_info(current_program)
+            await self.load_media_info(current_program)
 
     def volume_up(self):
         self.set_volume_level(self._volume_level + 0.1)
@@ -196,21 +182,22 @@ class XiaomiRadio(MediaPlayerEntity):
     def load_media(self, index):
         self._index = index
         fm = self._fm_list[index]
-        self._media_title = fm['url']
         id = fm['id']
         self.device.send('play_specify_fm', {'id': id, 'type': fm['type']})
-        # self.load_media_info(id)
 
-    def load_media_info(self, id):
+    async def load_media_info(self, id):
         radioId = str(id)
         if self._attr_app_id != radioId:
             self._attr_app_id = radioId
-            res = requests.get(f'https://live.ximalaya.com/live-web/v1/radio?radioId={radioId}')
+            res = await self.hass.async_add_executor_job(requests.get, f'https://live.ximalaya.com/live-web/v1/radio?radioId={radioId}')
             res_data = res.json()
-            data = res_data['data']
-            self._media_artist = data.get('name', '小米电台')
-            self._media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
-            self._media_title = data.get('programName', self._media_artist)
+            data = res_data['data']            
+            title = data.get('programName', '')
+            if title != '':
+                title = data.get('name', '小米电台')
+            self._attr_media_artist = data.get('name', '小米电台')
+            self._attr_media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
+            self._attr_media_title = title
 
     async def tts(self, call):
         _state = self._state

@@ -68,13 +68,17 @@ async def async_browse_media(media_player, media_content_type, media_content_id)
     )
     for item in media_player._fm_list:
         id = str(item['id'])
-        res = requests.get(f'https://live.ximalaya.com/live-web/v1/radio?radioId={id}')
+        res = await media_player.hass.async_add_executor_job(requests.get, f'https://live.ximalaya.com/live-web/v1/radio?radioId={id}')
+        
         res_data = res.json()
         data = res_data['data']
-        await media_player.hass.async_add_executor_job(requests.get, f'https://live.ximalaya.com/live-web/v1/radio?radioId={id}')
+        title = data.get('programName', '')
+        if title != '':
+            title = data.get('name', '小米电台')
+
         library_info.children.append(
             BrowseMedia(
-                title=data.get('programName', data.get('name', '小米电台')),
+                title=title,
                 media_class=MEDIA_CLASS_DIRECTORY,
                 media_content_type='id',
                 media_content_id=id,
