@@ -39,9 +39,7 @@ class XiaomiRemote(RemoteEntity):
         self.hass = hass
         self._host = host
         self._name = name
-        self.config_file = hass.config.path(".shaonianzhentan/ir_command.yaml")
-        # 默认配置
-        self.default_config_file = hass.config.path("custom_components/xiaomi_radio/ir.yaml")
+        self.config_file = hass.config.path(".storage/xiaomi_radio.yaml")
         self.device = AirConditioningCompanion(host, token)
 
     @property
@@ -50,7 +48,7 @@ class XiaomiRemote(RemoteEntity):
 
     @property
     def unique_id(self):
-        return self._host.replace('.', '')
+        return self._host
 
     @property
     def is_on(self):
@@ -61,19 +59,18 @@ class XiaomiRemote(RemoteEntity):
         return False
 
     async def async_turn_on(self, activity: str = None, **kwargs):
-         """Turn the remote on."""
+        """Turn the remote on."""
 
     async def async_turn_off(self, activity: str = None, **kwargs):
-         """Turn the remote off."""
-         
+        """Turn the remote off."""
+
     async def async_send_command(self, command, **kwargs):
         device = kwargs.get('device', '')
         key = command[0]
         ir_command = key
         if device != '':
             # 读取配置文件
-            command_list = load_yaml(self.default_config_file)
-            command_list.update(load_yaml(self.config_file))
+            command_list = load_yaml(self.config_file)
             dev = command_list.get(device, {})
             _LOGGER.debug(dev)
             # 判断配置是否存在
@@ -89,25 +86,40 @@ class XiaomiRemote(RemoteEntity):
     async def async_learn_command(self, **kwargs):
         device = kwargs.get('device', '')
         command = kwargs.get('command', '')
+        # 格式转换
+        if isinstance(command, list):
+            if len(command) > 0:
+                command = command[0]
+            else:
+                command = ''
+
         if command == '' or device == '':
             return
+        # 开始录码
+        await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "请将红外遥控器对准空调伴侣，然后按一下要录制的按键，成功后将在这里显示相关信息"
+                })
         # 读取配置文件
         command_list = load_yaml(self.config_file)
-        # 开始录码
+        if device not in command_list:
+            command_list[device] = {}
         slot = 30
         timeout = 30
         self.device.learn(slot)
         start_time = utcnow()
         while (utcnow() - start_time) < timedelta(seconds=timeout):
-            message = self.device.learn_result()
-            message = message[0]
+            learn_result = self.device.learn_result()
+            message = learn_result[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
                 command_list[device][command] = message
-                log_msg = "收到的命令是: {}, 红外码：{}".format(command, message)
-                self.hass.components.persistent_notification.async_create(
-                    log_msg, title="小米遥控器"
-                )
+                await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "设备：{} \n命令: {} \n红外码：{}".format(device, command, message)
+                })
                 self.device.learn_stop(slot)
                 # 保存配置文件
                 save_yaml(self.config_file, command_list)
@@ -115,6 +127,8 @@ class XiaomiRemote(RemoteEntity):
             await asyncio.sleep(1)
 
         self.device.learn_stop(slot)
-        self.hass.components.persistent_notification.async_create(
-            "录制超时，没有捕获到红外命令", title="小米遥控器"
-        )
+        await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "录制超时，没有捕获到红外命令"
+                })

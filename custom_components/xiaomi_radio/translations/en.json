@@ -1,4 +1,5 @@
 {
+    "title": "小米电台",
     "config": {
         "abort": {
             "single_instance_allowed": "仅允许单个配置"
@@ -13,7 +14,9 @@
                     "token": "Token"
                 }
             }
+        },
+        "error": {
+            "failed": "连接失败，请检查空调伴侣的 ip 或 token 是否正确！"
         }
-    },
-    "title": "小米电台"
+    }
 }
