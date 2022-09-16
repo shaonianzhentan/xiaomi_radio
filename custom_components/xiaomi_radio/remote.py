@@ -39,9 +39,7 @@ class XiaomiRemote(RemoteEntity):
         self.hass = hass
         self._host = host
         self._name = name
-        self.config_file = hass.config.path(".shaonianzhentan/ir_command.yaml")
-        # 默认配置
-        self.default_config_file = hass.config.path("custom_components/xiaomi_radio/ir.yaml")
+        self.config_file = hass.config.path(".storage/xiaomi_radio.yaml")
         self.device = AirConditioningCompanion(host, token)
 
     @property
@@ -50,7 +48,7 @@ class XiaomiRemote(RemoteEntity):
 
     @property
     def unique_id(self):
-        return self._host.replace('.', '')
+        return self._host
 
     @property
     def is_on(self):
@@ -61,19 +59,18 @@ class XiaomiRemote(RemoteEntity):
         return False
 
     async def async_turn_on(self, activity: str = None, **kwargs):
-         """Turn the remote on."""
+        """Turn the remote on."""
 
     async def async_turn_off(self, activity: str = None, **kwargs):
-         """Turn the remote off."""
-         
+        """Turn the remote off."""
+
     async def async_send_command(self, command, **kwargs):
         device = kwargs.get('device', '')
         key = command[0]
         ir_command = key
         if device != '':
             # 读取配置文件
-            command_list = load_yaml(self.default_config_file)
-            command_list.update(load_yaml(self.config_file))
+            command_list = load_yaml(self.config_file)
             dev = command_list.get(device, {})
             _LOGGER.debug(dev)
             # 判断配置是否存在
@@ -103,6 +100,8 @@ class XiaomiRemote(RemoteEntity):
             message = message[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
+                if device not in command_list:
+                    command_list[device] = {}
                 command_list[device][command] = message
                 log_msg = "收到的命令是: {}, 红外码：{}".format(command, message)
                 self.hass.components.persistent_notification.async_create(
