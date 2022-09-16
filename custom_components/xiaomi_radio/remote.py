@@ -86,27 +86,40 @@ class XiaomiRemote(RemoteEntity):
     async def async_learn_command(self, **kwargs):
         device = kwargs.get('device', '')
         command = kwargs.get('command', '')
+        # 格式转换
+        if isinstance(command, list):
+            if len(command) > 0:
+                command = command[0]
+            else:
+                command = ''
+
         if command == '' or device == '':
             return
+        # 开始录码
+        await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "请将红外遥控器对准空调伴侣，然后按一下要录制的按键，成功后将在这里显示相关信息"
+                })
         # 读取配置文件
         command_list = load_yaml(self.config_file)
-        # 开始录码
+        if device not in command_list:
+            command_list[device] = {}
         slot = 30
         timeout = 30
         self.device.learn(slot)
         start_time = utcnow()
         while (utcnow() - start_time) < timedelta(seconds=timeout):
-            message = self.device.learn_result()
-            message = message[0]
+            learn_result = self.device.learn_result()
+            message = learn_result[0]
             _LOGGER.debug("从设备接收到的消息: '%s'", message)
             if message.startswith("FE"):
-                if device not in command_list:
-                    command_list[device] = {}
                 command_list[device][command] = message
-                log_msg = "收到的命令是: {}, 红外码：{}".format(command, message)
-                self.hass.components.persistent_notification.async_create(
-                    log_msg, title="小米遥控器"
-                )
+                await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "设备：{} \n命令: {} \n红外码：{}".format(device, command, message)
+                })
                 self.device.learn_stop(slot)
                 # 保存配置文件
                 save_yaml(self.config_file, command_list)
@@ -114,6 +127,8 @@ class XiaomiRemote(RemoteEntity):
             await asyncio.sleep(1)
 
         self.device.learn_stop(slot)
-        self.hass.components.persistent_notification.async_create(
-            "录制超时，没有捕获到红外命令", title="小米遥控器"
-        )
+        await self.hass.services.async_call('persistent_notification', 'create', {
+                    'notification_id': 'xiaomi_radio-learn_command',
+                    'title': '小米遥控器',
+                    'message': "录制超时，没有捕获到红外命令"
+                })
