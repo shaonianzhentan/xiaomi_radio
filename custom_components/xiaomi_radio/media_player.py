@@ -31,7 +31,7 @@ from homeassistant.components.media_player.const import (
 
 from homeassistant.components.ffmpeg import (
     DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STATE_ON, STATE_PLAYING, STATE_PAUSED
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_PLAYING, STATE_PAUSED
 import homeassistant.helpers.config_validation as cv
 
 from .const import DEFAULT_NAME, DOMAIN, VERSION
@@ -63,41 +63,19 @@ class XiaomiRadio(MediaPlayerEntity):
     def __init__(self, host, token, name, hass):
         """Receive IP address and name to construct class."""
         self.hass = hass
-        self._name = name
         self._host = host
         self.device = Device(host, token, lazy_discover=False)
-        self._state = STATE_PAUSED
-        self._volume_level = 1
-        self._is_volume_muted = False
+
+        self._attr_name = name
+        self._attr_state = STATE_PAUSED        
+        self._attr_volume_level = 1
+        self._attr_unique_id = host
+        # 图片远程访问
+        self._attr_media_image_remotely_accessible = True
+        self._attr_is_volume_muted = False
+
         self._index = 0
         self._fm_list = []
-
-    @property
-    def name(self):
-        """Return the display name of this TV."""
-        return self._name
-
-    @property
-    def media_image_remotely_accessible(self) -> bool:
-        # 图片远程访问
-        return True
-
-    @property
-    def unique_id(self):
-        return self._host.replace('.', '')
-
-    @property
-    def volume_level(self):
-        return self._volume_level
-
-    @property
-    def is_volume_muted(self):
-        return self._is_volume_muted
-
-    @property
-    def state(self):
-        """Return _state variable, containing the appropriate constant."""
-        return self._state
 
     @property
     def assumed_state(self):
@@ -121,38 +99,41 @@ class XiaomiRadio(MediaPlayerEntity):
 
     async def async_update(self):
         # 当前状态
-        status = self.device.send("get_prop_fm", [])
-        current_volume = status.get('current_volume', 100)
-        self._volume_level = current_volume / 100
-        current_program = status.get('current_program')
-        current_status = status.get('current_status', 'pause')
-        if current_status == 'pause':
-            self._state = STATE_PAUSED
-        elif current_status == 'run':
-            self._state = STATE_PLAYING
-
-        # 获取收藏电台
-        result = self.device.send("get_channels", {"start": 0})
-        self._fm_list = result['chs']
-        # 读取相关信息
-        if current_program is not None:
-            await self.load_media_info(current_program)
+        try:
+            status = self.device.send("get_prop_fm", [])
+            current_volume = status.get('current_volume', 100)
+            self._attr_volume_level = current_volume / 100
+            current_program = status.get('current_program')
+            current_status = status.get('current_status', 'pause')
+            if current_status == 'pause':
+                self._attr_state = STATE_PAUSED
+            elif current_status == 'run':
+                self._attr_state = STATE_PLAYING
+            # 获取收藏电台
+            result = self.device.send("get_channels", {"start": 0})
+            self._fm_list = result['chs']
+            # 读取相关信息
+            if current_program is not None:
+                await self.load_media_info(current_program)
+        except Exception as ex:
+            print(ex)
+            self._attr_state = STATE_UNAVAILABLE
 
     def volume_up(self):
-        self.set_volume_level(self._volume_level + 0.1)
+        self.set_volume_level(self._attr_volume_level + 0.1)
 
     def volume_down(self):
-        self.set_volume_level(self._volume_level - 0.1)
+        self.set_volume_level(self._attr_volume_level - 0.1)
 
     def mute_volume(self, mute):
         if mute:
             self.set_volume_level(0)
         else:
             self.set_volume_level(0.5)
-        self._is_volume_muted = mute
+        self._attr_is_volume_muted = mute
 
     def set_volume_level(self, volume_level):
-        self._volume_level = volume_level
+        self._attr_volume_level = volume_level
         self.device.send('volume_ctrl_fm', [str(volume_level * 100)])
         
     def media_play(self):
@@ -200,7 +181,7 @@ class XiaomiRadio(MediaPlayerEntity):
             self._attr_media_title = title
 
     async def tts(self, call):
-        _state = self._state
+        _state = self._attr_state
         data = call.data
         message = self.template_message(data.get('text', ''))
         is_continue = data.get('continue', True)
