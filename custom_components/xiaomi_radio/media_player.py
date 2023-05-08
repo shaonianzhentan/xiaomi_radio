@@ -34,7 +34,7 @@ from homeassistant.components.ffmpeg import (
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_TOKEN, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_PLAYING, STATE_PAUSED
 import homeassistant.helpers.config_validation as cv
 
-from .const import DEFAULT_NAME, DOMAIN, VERSION
+from .const import DOMAIN
 from .browse_media import async_browse_media
 
 _LOGGER = logging.getLogger(__name__)
