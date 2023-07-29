@@ -1,12 +1,12 @@
 {
     "domain": "xiaomi_radio",
     "name": "\u5C0F\u7C73\u7535\u53F0",
-    "version": "2023.5.8",
+    "version": "2023.7.29",
     "config_flow": true,
     "documentation": "https://github.com/shaonianzhentan/xiaomi_radio",
     "dependencies": ["ffmpeg"],
     "requirements": [
-        "python-miio>=0.5.10"
+        "python-miio>=0.5.12"
     ],
     "codeowners": [
         "@shaonianzhentan"
