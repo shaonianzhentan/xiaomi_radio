@@ -233,8 +233,7 @@ class XiaomiRadio(MediaPlayerEntity):
 
 class AacConverter(HAFFmpeg):
 
-    @asyncio.coroutine
-    def convert(self, input_source, output, extra_cmd=None, timeout=15):
+    async def convert(self, input_source, output, extra_cmd=None, timeout=15):
         command = [
             "-vn",
             "-c:a",
@@ -249,13 +248,13 @@ class AacConverter(HAFFmpeg):
             "2",
             "-y"
         ]      
-        is_open = yield from self.open(cmd=command, input_source=input_source, output=output, extra_cmd=extra_cmd)         
+        is_open = await self.open(cmd=command, input_source=input_source, output=output, extra_cmd=extra_cmd)         
         if not is_open:
             _LOGGER.warning("Error starting FFmpeg.")
             return False
         try:
             proc_func = functools.partial(self._proc.communicate, timeout=timeout)
-            out, error = yield from self._loop.run_in_executor(None, proc_func)
+            out, error = await self._loop.run_in_executor(None, proc_func)
         except (asyncio.TimeoutError, ValueError):
             _LOGGER.error("Timeout convert audio file.")
             self._proc.kill()
