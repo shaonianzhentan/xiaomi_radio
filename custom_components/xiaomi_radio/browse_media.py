@@ -87,4 +87,5 @@ async def async_browse_media(media_player, media_content_type, media_content_id)
                 thumbnail=data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
             )
         )
+
     return library_info
