@@ -1,18 +1,16 @@
-"""Add support for the Xiaomi TVs."""
-import logging, asyncio, functools, os
-import requests, time, hashlib
+import logging, asyncio, time
 import voluptuous as vol
-from .shaonianzhentan import download, md5
-from miio import Device, DeviceException
 
-from haffmpeg.core import HAFFmpeg
+from homeassistant.components import media_source
 from homeassistant.helpers import template
 from homeassistant.helpers.network import get_url
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.ffmpeg import (DATA_FFMPEG, CONF_EXTRA_ARGUMENTS)    
-from homeassistant.components.media_player import MediaPlayerEntity
+from homeassistant.components.media_player import (
+    MediaPlayerEntity,
+    async_process_play_media_url
+)
 from homeassistant.components.media_player.const import (
     SUPPORT_BROWSE_MEDIA,
     SUPPORT_TURN_OFF,
@@ -36,10 +34,12 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN
 from .browse_media import async_browse_media
+from .gateway_radio import GatewayRadio
+from .tts import get_converter
 
 _LOGGER = logging.getLogger(__name__)
 
-SUPPORT_XIAOMI_RADIO = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
+SUPPORT_FEATURES = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
     SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | \
     SUPPORT_BROWSE_MEDIA | SUPPORT_PLAY_MEDIA
 
@@ -53,9 +53,9 @@ async def async_setup_entry(
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
     hass.http.register_static_path('/tts-radio', hass.config.path("tts"), False)
-    xiaomiRadio = XiaomiRadio(host, token, name, hass)
-    hass.services.async_register(DOMAIN, 'tts', xiaomiRadio.tts)
-    async_add_entities([xiaomiRadio], True)
+    async_add_entities([
+        XiaomiRadio(host, token, name, hass)
+    ], True)
 
 class XiaomiRadio(MediaPlayerEntity):
     """Represent the Xiaomi TV for Home Assistant."""
@@ -64,10 +64,10 @@ class XiaomiRadio(MediaPlayerEntity):
         """Receive IP address and name to construct class."""
         self.hass = hass
         self._host = host
-        self.device = Device(host, token, lazy_discover=False)
+        self.gateway = GatewayRadio(host, token)
 
         self._attr_name = name
-        self._attr_state = STATE_PAUSED        
+        self._attr_state = STATE_PAUSED
         self._attr_volume_level = 1
         self._attr_unique_id = host
         # 图片远程访问
@@ -76,47 +76,75 @@ class XiaomiRadio(MediaPlayerEntity):
 
         self._index = 0
         self._fm_list = []
-
-    @property
-    def assumed_state(self):
-        """Indicate that state is assumed."""
-        return True
+        self.updated_at = None
 
     @property
     def supported_features(self):
         """Flag media player features that are supported."""
-        return SUPPORT_XIAOMI_RADIO
+        return SUPPORT_FEATURES
 
     async def async_browse_media(self, media_content_type=None, media_content_id=None):
         return await async_browse_media(self, media_content_type, media_content_id)
 
     async def async_play_media(self, media_type, media_id, **kwargs):
-        if media_type == 'id':            
-            self.device.send('play_specify_fm', {'id': int(media_id), 'type': 0})
-            await self.load_media_info(media_id)
-        elif media_type == 'tts':
-            pass
+        hass = self.hass
+        # 媒体库
+        if media_source.is_media_source_id(media_id):
+            play_item = await media_source.async_resolve_media(hass, media_id, self.entity_id)
+            tts_url = async_process_play_media_url(hass, play_item.url)
+            # 转码
+            converter = get_converter(hass)
+            aac_file_name = await converter.async_get_file(hass.config.path("tts"), tts_url)
+            if aac_file_name is None:
+                hass.components.persistent_notification.async_create(f"音频转换失败", title='小米电台', notification_id="99999")
+                return
+            # 上传到网关
+            state = self._attr_state
+            aac_url = get_url(hass, prefer_external=True).strip('/') + f'/tts-radio/{aac_file_name}'
+            result = await self.gateway.async_download_music(aac_url)
+            if result:
+                self.gateway.play_music(99999)
+                if state == STATE_PLAYING:
+                    result = self.gateway.get_music_list(3)
+                    delay = result[0]['time']
+                    await asyncio.sleep(delay + 3)
+                    self.media_play()
+            else:
+                hass.components.persistent_notification.async_create(f"HA与网关不在同一个网段，无法使用TTS功能", title='小米电台', notification_id="99999")
+        elif media_type == 'id':
+            self.gateway.play_fm({'id': int(media_id), 'type': 0})
 
     async def async_update(self):
-        # 当前状态
         try:
-            status = self.device.send("get_prop_fm", [])
-            current_volume = status.get('current_volume', 100)
-            self._attr_volume_level = current_volume / 100
-            current_program = status.get('current_program')
-            current_status = status.get('current_status', 'pause')
-            if current_status == 'pause':
-                self._attr_state = STATE_PAUSED
-            elif current_status == 'run':
-                self._attr_state = STATE_PLAYING
-            # 获取收藏电台
-            result = self.device.send("get_channels", {"start": 0})
-            self._fm_list = result['chs']
-            # 读取相关信息
-            if current_program is not None:
-                await self.load_media_info(current_program)
+            res = await self.hass.async_add_executor_job(self.gateway.get_radio_info)
+            # 音量
+            self._attr_volume_level = res.get('volume') / 100
+
+            # 读取状态
+            state = STATE_OFF
+            status = res.get('status')
+            if status == 'pause':
+                state = STATE_PAUSED
+            elif status == 'run':
+                state = STATE_PLAYING
+            self._attr_state = state
+
+            if res.get('id') is not None:
+                self._attr_app_name = res.get('artist')
+                self._attr_media_image_url = res.get('image')
+                self._attr_media_title = res.get('program')
+
+            # 收藏电台
+            now = time.time()
+            if self.updated_at is None or self.updated_at < now:
+                fm_list = await self.hass.async_add_executor_job(self.gateway.get_channels)
+                _LOGGER.debug(fm_list)
+                self._fm_list = fm_list
+                # 5分钟更新一次
+                self.updated_at =  now + 60 * 5
+
         except Exception as ex:
-            print(ex)
+            _LOGGER.error(ex)
             self._attr_state = STATE_UNAVAILABLE
 
     def volume_up(self):
@@ -133,15 +161,17 @@ class XiaomiRadio(MediaPlayerEntity):
         self._attr_is_volume_muted = mute
 
     def set_volume_level(self, volume_level):
+        self.gateway.set_volume_level(volume_level * 100)
         self._attr_volume_level = volume_level
-        self.device.send('volume_ctrl_fm', [str(volume_level * 100)])
         
     def media_play(self):
-        self.device.send('play_fm', ["on"])
-
-    def media_pause(self):
-        self.device.send('play_fm', ["off"])
+        self.gateway.play()
+        self._attr_state = STATE_PLAYING
         
+    def media_pause(self):
+        self.gateway.pause()
+        self._attr_state = STATE_PAUSED
+
     def media_next_track(self):
         _len = len(self._fm_list)
         if _len == 0:
@@ -163,108 +193,5 @@ class XiaomiRadio(MediaPlayerEntity):
     def load_media(self, index):
         self._index = index
         fm = self._fm_list[index]
-        id = fm['id']
-        self.device.send('play_specify_fm', {'id': id, 'type': fm['type']})
-
-    async def load_media_info(self, id):
-        radioId = str(id)
-        if self._attr_app_id != radioId:
-            self._attr_app_id = radioId
-            res = await self.hass.async_add_executor_job(requests.get, f'https://live.ximalaya.com/live-web/v1/radio?radioId={radioId}')
-            res_data = res.json()
-            data = res_data['data']            
-            title = data.get('programName', '')
-            if title != '':
-                title = data.get('name', '小米电台')
-            self._attr_media_artist = data.get('name', '小米电台')
-            self._attr_media_image_url = data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
-            self._attr_media_title = title
-
-    async def tts(self, call):
-        _state = self._attr_state
-        data = call.data
-        message = self.template_message(data.get('text', ''))
-        is_continue = data.get('continue', True)
-        is_notification = data.get('notification', False)
-        tts_dir = self.hass.config.path("tts")
-        md5_message = md5(message)
-        mp3Path = f'{tts_dir}/radio-{md5_message}.mp3'
-        aacPath = f'{tts_dir}/radio-{md5_message}.aac'
-        ttsUrl = get_url(self.hass).strip('/') + f'/tts-radio/radio-{md5_message}.aac'
-        if os.path.exists(aacPath) == False:
-            # 下载mp3文件
-            await download(f'https://fanyi.baidu.com/gettts?lan=zh&text={message}&spd=5&source=web', mp3Path)
-            # 转换aac文件
-            ffmpeg = AacConverter(self.hass.data[DATA_FFMPEG].binary)
-            result = await ffmpeg.convert(mp3Path, output=aacPath)
-            if (not result) or (not os.path.exists(aacPath)) or (os.path.getsize(aacPath) < 1):
-                _LOGGER.error("Convert file to aac failed.")
-                return False
-        # 删除文件并重新上传
-        self.device.send("delete_user_music", ['99999'])
-        self.device.send("download_user_music", ["99999", ttsUrl])
-        index = 0
-        while index < 10:
-            progess = self.device.send("get_download_progress", [])
-            if str(progess) == "['99999:100']":
-                break
-            index += 1
-            await asyncio.sleep(1)
-        if (index >= 10):
-            _LOGGER.error("download tts file [" + ttsUrl + "] to gateway failed.")
-            return False
-        self.device.send('play_music', [99999])
-        
-        if is_notification == True:
-            # log_msg = "TTS: %s" % message
-            self.hass.components.persistent_notification.async_create(f"TTS: {message}", title='小米电台', notification_id="99999")
-        # 如果之前是在播放电台，则恢复播放
-        if is_continue and _state == STATE_PLAYING:
-            result = self.device.send("get_music_info", [3])
-            delay = result['list'][0]['time']
-            await asyncio.sleep(delay + 3)
-            self.media_play()
-
-        # 解析模板
-    def template_message(self, _message):
-        tpl = template.Template(_message, self.hass)
-        _message = tpl.async_render(None)
-        return _message
-
-class AacConverter(HAFFmpeg):
-
-    async def convert(self, input_source, output, extra_cmd=None, timeout=15):
-        command = [
-            "-vn",
-            "-c:a",
-            "aac",
-            "-strict",
-            "-2",
-            "-b:a",
-            "64K",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-y"
-        ]      
-        is_open = await self.open(cmd=command, input_source=input_source, output=output, extra_cmd=extra_cmd)         
-        if not is_open:
-            _LOGGER.warning("Error starting FFmpeg.")
-            return False
-        try:
-            proc_func = functools.partial(self._proc.communicate, timeout=timeout)
-            out, error = await self._loop.run_in_executor(None, proc_func)
-        except (asyncio.TimeoutError, ValueError):
-            _LOGGER.error("Timeout convert audio file.")
-            self._proc.kill()
-            return False    
-        return True
-
-'''
-0: alarm
-1: alarm
-2: chord
-3: custom
-print(device.send("get_music_info", [0]))
-'''
+        self.gateway.play_fm(fm)
+        self._attr_state = STATE_PLAYING

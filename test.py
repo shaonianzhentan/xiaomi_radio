@@ -5,6 +5,8 @@ device = Gateway('192.168.0.105', 'e7d17baf8f9e05103b502afa163ee0a7')
 print(device.info())
 print(device.radio.get_radio_info())
 
+print(device.send("get_music_info", [2]))
+print(device.send("play_music", [99999, 100]))
 
 # 警报声
 def play_alarm(sound, volume):
@@ -64,7 +66,3 @@ def get_channels():
         _list.extend(chs)
     return _list
 
-print(get_channels())
-
-
-print(device.radio.get_radio_info())

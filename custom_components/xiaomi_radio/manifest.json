@@ -1,7 +1,7 @@
 {
     "domain": "xiaomi_radio",
     "name": "\u5C0F\u7C73\u7535\u53F0",
-    "version": "2023.7.29",
+    "version": "2023.8.13",
     "config_flow": true,
     "documentation": "https://github.com/shaonianzhentan/xiaomi_radio",
     "dependencies": ["ffmpeg"],
@@ -11,5 +11,5 @@
     "codeowners": [
         "@shaonianzhentan"
     ],
-    "iot_class": "assumed_state"
+    "iot_class": "cloud_polling"
 }

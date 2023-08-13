@@ -1,8 +1,8 @@
 """Support for media browsing."""
 import logging, os
-import requests
 from urllib.parse import urlparse, parse_qs, parse_qsl, quote
 from homeassistant.helpers.network import get_url
+from homeassistant.components import media_source
 from homeassistant.components.media_player import BrowseError, BrowseMedia
 from homeassistant.components.media_player.const import (
     MEDIA_CLASS_ALBUM,
@@ -55,7 +55,16 @@ CHILD_TYPE_MEDIA_CLASS = {
 
 _LOGGER = logging.getLogger(__name__)
 
+tts_protocol = 'media-source://tts'
+
 async def async_browse_media(media_player, media_content_type, media_content_id):
+    hass = media_player.hass
+    # 媒体库
+    if media_content_id is not None and media_content_id.startswith(tts_protocol):
+        return await media_source.async_browse_media(
+            hass,
+            media_content_id
+        )
 
     library_info = BrowseMedia(
         media_class=MEDIA_CLASS_DIRECTORY,
@@ -64,27 +73,29 @@ async def async_browse_media(media_player, media_content_type, media_content_id)
         title="小米电台",
         can_play=False,
         can_expand=True,
-        children=[],
+        children=[
+            BrowseMedia(
+                media_class=MEDIA_CLASS_DIRECTORY,
+                media_content_id=tts_protocol,
+                media_content_type='app',
+                title="Text-to-speech",
+                can_play=False,
+                can_expand=True,
+                thumbnail='https://brands.home-assistant.io/_/tts/icon.png'
+            )
+        ],
     )
-    for item in media_player._fm_list:
-        id = str(item['id'])
-        res = await media_player.hass.async_add_executor_job(requests.get, f'https://live.ximalaya.com/live-web/v1/radio?radioId={id}')
-        
-        res_data = res.json()
-        data = res_data['data']
-        title = data.get('programName', '')
-        if title != '':
-            title = data.get('name', '小米电台')
 
+    for item in media_player._fm_list:
         library_info.children.append(
             BrowseMedia(
-                title=title,
+                title=item['artist'],
                 media_class=MEDIA_CLASS_DIRECTORY,
                 media_content_type='id',
-                media_content_id=id,
+                media_content_id=str(item['id']),
                 can_play=True,
                 can_expand=False,
-                thumbnail=data.get('coverLarge', 'https://www.home-assistant.io/images/favicon-192x192-full.png')
+                thumbnail=item['image']
             )
         )
 
