@@ -12,19 +12,7 @@ from homeassistant.components.media_player import (
     async_process_play_media_url
 )
 from homeassistant.components.media_player.const import (
-    SUPPORT_BROWSE_MEDIA,
-    SUPPORT_TURN_OFF,
-    SUPPORT_TURN_ON,
-    SUPPORT_VOLUME_STEP,
-    SUPPORT_VOLUME_SET,
-    SUPPORT_VOLUME_MUTE,
-    SUPPORT_SELECT_SOURCE,
-    SUPPORT_SELECT_SOUND_MODE,
-    SUPPORT_PLAY_MEDIA,
-    SUPPORT_PLAY,
-    SUPPORT_PAUSE,
-    SUPPORT_NEXT_TRACK,
-    SUPPORT_PREVIOUS_TRACK
+    MediaPlayerEntityFeature
 )
 
 from homeassistant.components.ffmpeg import (
@@ -39,9 +27,17 @@ from .tts import get_converter
 
 _LOGGER = logging.getLogger(__name__)
 
-SUPPORT_FEATURES = SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_SET | \
-    SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | \
-    SUPPORT_BROWSE_MEDIA | SUPPORT_PLAY_MEDIA
+SUPPORT_FEATURES = (
+    MediaPlayerEntityFeature.VOLUME_STEP | 
+    MediaPlayerEntityFeature.VOLUME_MUTE | 
+    MediaPlayerEntityFeature.VOLUME_SET |
+    MediaPlayerEntityFeature.PLAY | 
+    MediaPlayerEntityFeature.PAUSE | 
+    MediaPlayerEntityFeature.PREVIOUS_TRACK | 
+    MediaPlayerEntityFeature.NEXT_TRACK |
+    MediaPlayerEntityFeature.BROWSE_MEDIA | 
+    MediaPlayerEntityFeature.PLAY_MEDIA
+)
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -52,7 +48,21 @@ async def async_setup_entry(
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     token = config.get(CONF_TOKEN)
-    hass.http.register_static_path('/tts-radio', hass.config.path("tts"), False)
+    try:
+        if hasattr(hass.http, 'async_register_static_paths'):
+            from homeassistant.components.http import StaticPathConfig
+            await hass.http.async_register_static_paths([
+                StaticPathConfig(
+                    url_path="/tts-radio",
+                    path=hass.config.path("tts"),
+                    cache_headers=False
+                )
+            ])
+        else:
+            # 兼容旧版本
+            hass.http.register_static_path('/tts-radio', hass.config.path("tts"))
+    except Exception as e:
+        _LOGGER.warning(f"Failed to register static path: {e}")
     async_add_entities([
         XiaomiRadio(host, token, name, hass)
     ], True)
